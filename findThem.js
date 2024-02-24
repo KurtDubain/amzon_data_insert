@@ -1,3 +1,4 @@
+// 处理一个文件夹下的同类型的csv的批量处理和数据插入操作
 const fs = require("fs");
 const csv = require("csv-parser");
 const path = require("path");

@@ -1,3 +1,4 @@
+// 单文件csv的处理
 const csv = require("csv-parser");
 const fs = require("fs");
 //获取用户输入
@@ -26,7 +27,7 @@ const dbConfig = {
 //     socketPath: '/var/run/mysqld/mysqld.sock'
 // };
 let csvFilePath = "";
-const batchSize = 1000; // 每批1000条记录
+const batchSize = 1000; // 每批1000条记录执行插入
 // 数据插入处理
 async function importCsvData() {
   console.log("begin", new Date());
@@ -59,6 +60,7 @@ async function importCsvData() {
         if (desc.includes(keyWord)) {
           batch.push([rank, desc, timestamp]);
         }
+        // on事件无法执行异步操作,所以无法确定什么时候执行完毕了插入操作
         if (batch.length >= batchSize) {
           connection.query(
             "INSERT INTO search_words (`rank`, `desc`, `timestamp`) VALUES ?",
@@ -77,6 +79,7 @@ async function importCsvData() {
         }
         await connection.commit(); // 提交事务
         console.log("数据已经插入数据库中", new Date());
+        // 确保数据处理完毕之后,再断开数据库连接
         await connection.end();
       });
   } catch (err) {
@@ -84,6 +87,7 @@ async function importCsvData() {
   }
 }
 let keyWord = "";
+// 输入对应的文件路径名和指定的关键词
 rl.question("请输入你希望查找的关键词：", (answer) => {
   keyWord = answer;
   console.log(`关键词是：${answer}！`);
