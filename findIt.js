@@ -7,6 +7,7 @@ const rl = readline.createInterface({
   output: process.stdout,
 });
 const mysql = require("mysql2/promise");
+const { time } = require("console");
 // 测试
 const dbConfig = {
   host: "43.143.148.172",
@@ -26,7 +27,7 @@ const dbConfig = {
 // };
 let csvFilePath = "";
 const batchSize = 1000; // 每批1000条记录
-
+// 数据插入处理
 async function importCsvData() {
   console.log("begin", new Date());
   try {
@@ -43,6 +44,7 @@ async function importCsvData() {
         let timestamp;
         let i = 0;
         // 简单遍历获取对象键值对方便之后处理
+        // 由于部分属性根据属性名无法获取到对应属性值，因此采用遍历键值对来获取
         for (let key in row) {
           let item = row[key];
           if (i == 0) {
