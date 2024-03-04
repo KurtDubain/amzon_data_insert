@@ -1,65 +1,88 @@
 const fs = require("fs");
+const dayjs = require("dayjs");
 const csv = require("csv-parser");
 const path = require("path");
-const readline = require("readline");
-// const { importCsvData } = require('./4insert_test.js')
 const mysql = require("mysql2/promise");
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+const { list } = require("./list"); //获取所有的搜索词
 const directoryPath = path.join(__dirname, "../"); // 父目录路径
-// // 正式数据库配置
-// const dbConfig = {
-//     host: '127.0.0.1',
-//     port: 3306,
-//     user: 'Amazon',
-//     password: 'Amazon20240221',
-//     database: 'amazon_boot',
-//     socketPath: '/var/run/mysqld/mysqld.sock'
-// };
-// 测试
+// 正式数据库配置
 const dbConfig = {
-  host: "43.143.148.172",
+  host: "127.0.0.1",
   port: 3306,
-  user: "neon",
-  password: "NeonOnTestServer",
+  user: "Amazon",
+  password: "Amazon20240221",
   database: "amazon_boot",
+  socketPath: "/var/run/mysqld/mysqld.sock",
 };
-
-rl.question("请输入你希望查找的关键词：", async (keyWord) => {
-  console.log(`关键词是：${keyWord}！`);
-  let oldDate = new Date();
-  rl.close();
+// 测试
+// const dbConfig = {
+//     host: '43.143.148.172',
+//     port: 3306,
+//     user: 'neon',
+//     password: 'NeonOnTestServer',
+//     database: 'amazon_boot'
+// };
+//对一个搜索词的多个文件进行操作
+const insertFiles = async (keyWord, oldDate) => {
   try {
     const connection = await mysql.createConnection(dbConfig);
-    console.log("Connected successfully to MySQL");
+    console.log(
+      "数据库连接成功",
+      dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+    );
     //获取读取过的文件
     let cList = await connection.query(
       "select * from memorization_search_words"
     );
     let readList;
-    // console.log('cList', cList);
     if (cList[0].length == 0) {
       readList = [];
     } else {
       readList = JSON.parse(cList[0][0].desc);
     }
-    console.log("readlist", readList);
+    console.log(
+      `${keyWord}关键词中已经插入的文件名:`,
+      readList,
+      dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+    );
     fs.readdir(directoryPath, async (err, files) => {
       if (err) {
-        console.log("Unable to scan directory: " + err);
+        console.log(
+          "找不到目录" + err,
+          dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+        );
+        console.log(
+          dayjs(new Date()).diff(oldDate, "minute"),
+          dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+        );
         await connection.end();
         return;
       }
       let nums = 0;
       let storeArr = [];
-      //
-      let new_files = files.filter((item) => item !== item.includes(readList));
+      let new_files = files.filter((item) => {
+        if (!readList.includes(item)) {
+          return item;
+        } else {
+          return;
+        }
+      });
       //arrs是未读取过的符合文件名格式的列表
       let arrs = new_files.filter((file) =>
-        file.match(/^US_热门搜索词_简单_Day_20\d{2}_\d{2}_\d{2}\.csv$/)
+        file.match(/^US_热门搜索词_简单_Week_20\d{2}_\d{2}_\d{2}\.csv$/)
       );
+      if (arrs.length == 0) {
+        console.log(
+          "没有需要处理的文件",
+          dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+        );
+        console.log(
+          dayjs(new Date()).diff(oldDate, "minute"),
+          dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+        );
+        await connection.end();
+        return;
+      }
       const promises = arrs.map((file) => {
         let batch = [];
         let stream = fs
@@ -82,11 +105,10 @@ rl.question("请输入你希望查找的关键词：", async (keyWord) => {
             if (batch.length >= 1000) {
               // 注意这里移除了原有的await，因为.on('data')不支持异步函数
               stream.pause();
-              let res = await connection.query(
+              await connection.query(
                 "INSERT INTO search_words (`rank`, `desc`, `timestamp`) VALUES ?",
                 [batch]
               );
-              // console.log(res);
               stream.resume();
               batch = []; // 重置批次
             }
@@ -104,73 +126,87 @@ rl.question("请输入你希望查找的关键词：", async (keyWord) => {
                   nums++;
                   storeArr.push(file);
                   if (nums == arrs.length) {
-                    //instert
-                    console.log(storeArr);
-                    let well = await insertAndUpdate(
+                    await insertAndUpdate(
                       connection,
                       keyWord,
                       storeArr,
                       readList,
                       cList[0].length == 0
                     );
-                    console.log(well);
                     console.log(
-                      "时间差",
-                      new Date().getTime() - oldDate.getTime()
+                      dayjs(new Date()).diff(oldDate, "minute"),
+                      dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
                     );
                     await connection.end();
                   }
                 }
-                // console.log(results)
                 if (ResultSetHeader.affectedRows > 0) {
                   console.log(
-                    "Data has been successfully inserted for",
-                    path.join(directoryPath)
+                    `${file}文件对应的${keyWord}已经完成新增`,
+                    dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
                   );
                 } else {
-                  console.log("No rows were inserted.");
+                  console.log(
+                    "无新增内容",
+                    dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+                  );
                 }
                 stream.resume();
               } catch (error) {
-                console.log(error);
+                console.log(
+                  error,
+                  dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+                );
               }
             } else {
-              console.log("No data to insert.");
+              console.log(
+                "无新增内容",
+                dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+              );
               nums++;
               storeArr.push(file);
               if (nums == arrs.length) {
-                //instert
-                console.log(storeArr);
-                let well = await insertAndUpdate(
+                await insertAndUpdate(
                   connection,
                   keyWord,
                   storeArr,
                   readList,
                   cList[0].length == 0
                 );
-                console.log(well);
-                console.log("时间差", new Date().getTime() - oldDate.getTime());
+                console.log(
+                  dayjs(new Date()).diff(oldDate, "minute"),
+                  dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+                );
                 await connection.end();
               }
             }
           })
-          .on("close", () => {
-            console.log(111);
-          });
+          .on("close", () => {});
       });
       try {
-        let res = await Promise.all([...promises]);
+        await Promise.all([...promises]);
       } catch (err) {
-        console.error("An error occurred during file processing:", err);
+        console.error("处理文件时候的出现了报错:", err);
       }
     });
   } catch (err) {
-    console.error("An error occurred:", err);
+    if (err.code === "ETIMEDOUT") {
+      console.log(
+        "连接超时，请重新连接",
+        dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+      );
+      //骚扰彬哥
+    } else {
+      console.error(
+        "操作数据库的时候出现了报错:",
+        err,
+        dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+      );
+    }
   }
-});
+};
 
 const insertAndUpdate = async (cn, kw, arr_new, arr_old, isInsert) => {
-  console.log("isInsert", isInsert);
   let str, res;
   if (isInsert) {
     str = JSON.stringify(arr_new);
@@ -185,5 +221,22 @@ const insertAndUpdate = async (cn, kw, arr_new, arr_old, isInsert) => {
       [str, kw]
     );
   }
+  console.log(res, dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss"));
   return res;
 };
+const main = () => {
+  let date = dayjs(new Date());
+  let promises = list.map((item) => {
+    console.log(
+      `目前所有的搜索词有${list}`,
+      dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+    );
+    console.log(
+      `当前处理的搜索词是：${item}！`,
+      dayjs(new Date()).format("YYYY-MM-DD HH:mm:ss")
+    );
+    return insertFiles(item, date);
+  });
+  Promise.all(promises);
+};
+main();
